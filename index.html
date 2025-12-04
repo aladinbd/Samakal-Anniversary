@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samakal Anniversary Frame</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #fff8f0; /* Light orange background */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .card {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            max-width: 500px;
+            width: 100%;
+            text-align: center;
+            border-top: 6px solid #ff6b00; /* Orange top border */
+        }
+
+        h1 { color: #ff6b00; margin-top: 0; }
+        p { color: #555; }
+        
+        /* Canvas Container to handle centering */
+        .canvas-container {
+            position: relative;
+            margin: 20px auto;
+            width: 300px; 
+            height: 300px;
+            border-radius: 50%; /* Shows the circular preview */
+            overflow: hidden;
+            border: 4px solid #ff6b00; /* Orange border */
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            background-color: #e4e6eb;
+            cursor: move; /* Indicates draggable */
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Controls */
+        .controls { margin: 20px 0; }
+        
+        input[type="range"] {
+            width: 80%;
+            margin: 10px 0;
+            cursor: pointer;
+            accent-color: #ff6b00; /* Orange slider */
+        }
+
+        .btn {
+            background-color: #ff6b00;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: bold;
+            display: inline-block;
+            cursor: pointer;
+            border: none;
+            font-size: 16px;
+            margin: 5px;
+            transition: background 0.2s;
+        }
+
+        .btn:hover { background-color: #e65100; }
+
+        .btn.secondary {
+            background-color: #f0f2f5;
+            color: #050505;
+        }
+        .btn.secondary:hover { background-color: #d8dadf; }
+
+        #fileInput { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h1>Samakal Anniversary</h1>
+    <p>Upload your photo to generate your anniversary badge.</p>
+
+    <!-- The Canvas Area -->
+    <div class="canvas-container" id="canvas-container">
+        <canvas id="canvas" width="1080" height="1080"></canvas>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+        <label for="scale">Zoom & Adjust:</label><br>
+        <input type="range" id="scale" min="0.5" max="3" step="0.05" value="1">
+    </div>
+
+    <!-- Buttons -->
+    <div>
+        <button class="btn secondary" onclick="document.getElementById('fileInput').click()">📁 Upload Photo</button>
+        <a id="downloadBtn" class="btn" href="#">⬇️ Download</a>
+    </div>
+
+    <!-- Hidden File Input -->
+    <input type="file" id="fileInput" accept="image/*">
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const fileInput = document.getElementById('fileInput');
+    const scaleInput = document.getElementById('scale');
+    const downloadBtn = document.getElementById('downloadBtn');
+    
+    // Variables to track image state
+    let userImage = null;
+    let frameImage = null;
+    let imageX = 0;
+    let imageY = 0;
+    let isDragging = false;
+    let startX, startY;
+
+    // --- CONFIGURATION ---
+    
+    // I have REMOVED the "drawPlaceholderFrame" function.
+    // The code will now ONLY use your frame.png file.
+
+    // Try to load the real frame automatically
+    frameImage = new Image();
+    frameImage.crossOrigin = "anonymous"; 
+    frameImage.src = 'frame.png'; // Make sure your image is named exactly this
+    
+    frameImage.onload = function() {
+        console.log("frame.png loaded successfully");
+        draw();
+    };
+    
+    frameImage.onerror = function() {
+        console.error("frame.png not found or blocked by browser security");
+        
+        // Show a helpful alert if running locally
+        if (window.location.protocol === 'file:') {
+            alert("⚠️ Image Load Error\n\nThe browser blocked loading 'frame.png' because you opened this file directly.\n\nTo see your frame, you must:\n1. Use 'Live Server' in VS Code\n2. OR upload this folder to a website.");
+        }
+        
+        frameImage = null;
+        draw();
+    };
+
+    // Handle File Upload
+    fileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            userImage = new Image();
+            userImage.onload = () => {
+                // Reset position and scale when new image loads
+                imageX = 0;
+                imageY = 0;
+                scaleInput.value = 1;
+                draw();
+            };
+            userImage.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+
+    // Handle Zoom
+    scaleInput.addEventListener('input', draw);
+
+    // Handle Dragging
+    const container = document.getElementById('canvas-container');
+    
+    container.addEventListener('mousedown', startDrag);
+    window.addEventListener('mouseup', endDrag);
+    window.addEventListener('mousemove', drag);
+
+    container.addEventListener('touchstart', (e) => {
+        e.preventDefault(); 
+        startDrag(e.touches[0]);
+    }, {passive: false});
+    window.addEventListener('touchend', endDrag);
+    window.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        drag(e.touches[0]);
+    }, {passive: false});
+
+    function startDrag(e) {
+        if (!userImage) return;
+        isDragging = true;
+        startX = e.clientX - imageX;
+        startY = e.clientY - imageY;
+    }
+
+    function endDrag() {
+        isDragging = false;
+    }
+
+    function drag(e) {
+        if (!isDragging) return;
+        imageX = e.clientX - startX;
+        imageY = e.clientY - startY;
+        draw();
+    }
+
+    // Main Draw Function
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // 1. Draw User Image
+        if (userImage) {
+            const scale = parseFloat(scaleInput.value);
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const imgW = userImage.width * scale;
+            const imgH = userImage.height * scale;
+            const drawX = (centerX - imgW / 2) + (imageX * 2); 
+            const drawY = (centerY - imgH / 2) + (imageY * 2);
+
+            ctx.drawImage(userImage, drawX, drawY, imgW, imgH);
+        } else {
+            // Instruction Text
+            ctx.fillStyle = '#ffccbc'; 
+            ctx.font = 'bold 60px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("Upload Photo", 540, 500);
+            ctx.font = '40px sans-serif';
+            ctx.fillText("Drag & Zoom to Adjust", 540, 560);
+        }
+
+        // 2. Draw Frame Overlay (ONLY if loaded)
+        if (frameImage) {
+            ctx.drawImage(frameImage, 0, 0, canvas.width, canvas.height);
+        }
+    }
+
+    downloadBtn.addEventListener('click', function(e) {
+        try {
+            const dataURL = canvas.toDataURL('image/png');
+            downloadBtn.href = dataURL;
+            downloadBtn.download = 'samakal-profile.png';
+        } catch (err) {
+            e.preventDefault();
+            console.error(err);
+            alert("⚠️ Browser Security Warning ⚠️\n\nYour browser is blocking the download because this file was opened directly from your computer.\n\nTo fix this:\n1. Upload this folder to a real website.\n2. OR use 'Live Server' in VS Code.\n3. OR use Firefox.");
+        }
+    });
+
+    // Initial Draw
+    draw();
+</script>
+
+</body>
+</html>
